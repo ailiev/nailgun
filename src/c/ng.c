@@ -62,6 +62,14 @@
 #define MIN(a,b) ((a<b)?(a):(b))
 #endif
 
+#ifdef WIN32
+	#define NAILGUN_FILESEPARATOR "NAILGUN_FILESEPARATOR=\\"
+	#define NAILGUN_PATHSEPARATOR "NAILGUN_PATHSEPARATOR=;"
+#else
+	#define NAILGUN_FILESEPARATOR "NAILGUN_FILESEPARATOR=/"
+	#define NAILGUN_PATHSEPARATOR "NAILGUN_PATHSEPARATOR=:"
+#endif
+
 #define NAILGUN_CLIENT_NAME_EXE "ng.exe"
 
 #define NAILGUN_PORT_DEFAULT "2113"
@@ -437,13 +445,32 @@ int isNailgunClientName(char *s) {
 /**
  * Displays usage info and bails
  */
-void usage() {
-  fprintf(stderr, "Usage: ng [--nailgun-server server] [--nailgun-port port] command [arg1...]\n");
-  cleanUpAndExit(-1);
+void usage(int exitcode) {
+
+  fprintf(stderr, "Usage: ng class [--nailgun-options] [args]\n");
+  fprintf(stderr, "          (to execute a class)\n");
+  fprintf(stderr, "   or: ng alias [--nailgun-options] [args]\n");
+  fprintf(stderr, "          (to execute an aliased class)\n");
+  fprintf(stderr, "   or: alias [--nailgun-options] [args]\n");
+  fprintf(stderr, "          (to execute an aliased class, where \"alias\"\n");
+  fprintf(stderr, "           is both the alias for the class and a symbolic\n");
+  fprintf(stderr, "           link to the ng client)\n\n");
+  
+  fprintf(stderr, "where options include:\n");
+  fprintf(stderr, "   --nailgun-D<name>=<value>   set/override a client environment variable\n");
+  fprintf(stderr, "   --nailgun-version           print product version and exit\n");
+  fprintf(stderr, "   --nailgun-showversion       print product version and continue\n");
+  fprintf(stderr, "   --nailgun-server            to specify the address of the nailgun server\n");
+  fprintf(stderr, "                               (default is localhost)\n");
+  fprintf(stderr, "   --nailgun-port              to specify the port of the nailgun server\n");
+  fprintf(stderr, "                               (default is 2113)\n");
+  fprintf(stderr, "   --nailgun-help              print this message and exit\n");
+
+  cleanUpAndExit(exitcode);
 }
 
 int main(int argc, char *argv[], char *env[]) {
-  int i, showedVersion;
+  int i;
   struct sockaddr_in server_addr;
   char *nailgun_server;        /* server as specified by user */
   char *nailgun_port;          /* port as specified by user */
@@ -491,22 +518,25 @@ int main(int argc, char *argv[], char *env[]) {
      --nailgun-port) and NULL them and their parameters after
      reading them if found.  later, when we send args to the
      server, skip the null args. */
-  showedVersion = 0;
   for (i = 1; i < argc; ++i) {
     if (!strcmp("--nailgun-server", argv[i])) {
-      if (i == argc - 1) usage();
+      if (i == argc - 1) usage(NAILGUN_BAD_ARGUMENTS);
       nailgun_server = argv[i + 1];
       argv[i] = argv[i + 1] = NULL;
       ++i;
     } else if(!strcmp("--nailgun-port", argv[i])) {
-      if (i == argc - 1) usage();
+      if (i == argc - 1) usage(NAILGUN_BAD_ARGUMENTS);
       nailgun_port = argv[i + 1];
       argv[i] = argv[i + 1]= NULL;
       ++i;
     } else if (!strcmp("--nailgun-version", argv[i])) {
       printf("NailGun client version %s\n", NAILGUN_VERSION);
+      cleanUpAndExit(0);
+    } else if (!strcmp("--nailgun-showversion", argv[i])) {
+      printf("NailGun client version %s\n", NAILGUN_VERSION);
       argv[i] = NULL;
-      showedVersion = 1;
+    } else if (!strcmp("--nailgun-help", argv[i])) {
+      usage(0);
     } else if (cmd == NULL) {
       cmd = argv[i];
       firstArgIndex = i + 1;
@@ -516,8 +546,7 @@ int main(int argc, char *argv[], char *env[]) {
   /* if there's no command, we should only display usage info
      if the version number was not displayed. */
   if (cmd == NULL) {
-    if (showedVersion) return(0);
-    usage();
+    usage(NAILGUN_BAD_ARGUMENTS);
   }
   
   /* jump through a series of connection hoops */  
@@ -556,6 +585,8 @@ int main(int argc, char *argv[], char *env[]) {
   }
 
   /* now send environment */  
+  sendText(CHUNKTYPE_ENV, NAILGUN_FILESEPARATOR);
+  sendText(CHUNKTYPE_ENV, NAILGUN_PATHSEPARATOR);
   for(i = 0; env[i]; ++i) {
     sendText(CHUNKTYPE_ENV, env[i]);
   }

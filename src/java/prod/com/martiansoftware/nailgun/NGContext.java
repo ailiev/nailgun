@@ -168,6 +168,22 @@ public class NGContext {
 	}
 
 	/**
+	 * Returns the file separator ('/' or '\\') used by the client's os.
+	 * @return the file separator ('/' or '\\') used by the client's os.
+	 */
+	public String getFileSeparator() {
+		return (remoteEnvironment.getProperty("NAILGUN_FILESEPARATOR"));
+	}
+	
+	/**
+	 * Returns the path separator (':' or ';') used by the client's os.
+	 * @return the path separator (':' or ';') used by the client's os.
+	 */
+	public String getPathSeparator() {
+		return (remoteEnvironment.getProperty("NAILGUN_PATHSEPARATOR"));		
+	}
+	
+	/**
 	 * Returns the address of the client at the other side of this connection.
 	 * @return the address of the client at the other side of this connection.
 	 */
