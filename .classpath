@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src/java/prod"/>
+	<classpathentry kind="src" path="src/java/test"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="tools/lib/junit.jar"/>
+	<classpathentry kind="output" path="build/eclipse"/>
+</classpath>

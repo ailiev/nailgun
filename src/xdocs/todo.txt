@@ -1,0 +1,14 @@
+trap system.exit
+look for resource leaks thanks to threadlocals
+provide directory scanning functionality
+server launcher/command line options
+windows client
+
+#provide hooks for server in NGContext?
+#detect and handle nailMain(NGContext)
+#provide aliasing functionality
+#put real stdin/out/err streams in context
+#swap threadlocals with inheritablethreadlocals?
+#restore stdin/out/err for shutdown?
+#server start/stop/deploy/etc.
+#	reserve "ng-" for system
