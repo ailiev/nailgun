@@ -39,6 +39,8 @@ class ThreadLocalPrintStream extends PrintStream {
      */
     private InheritableThreadLocal streams = null;
 
+    private PrintStream defaultPrintStream = null;
+    
     /**
      * Creates a new InheritedThreadLocalPrintStream
      * @param defaultPrintStream the PrintStream that will be used if the
@@ -47,7 +49,8 @@ class ThreadLocalPrintStream extends PrintStream {
     public ThreadLocalPrintStream(PrintStream defaultPrintStream) {
         super(defaultPrintStream);
         streams = new InheritableThreadLocal();
-        init(defaultPrintStream);
+        this.defaultPrintStream = defaultPrintStream;
+        init(null);
     }
 
     /**
@@ -63,7 +66,8 @@ class ThreadLocalPrintStream extends PrintStream {
      * @return this thread's PrintStream
      */
     PrintStream getPrintStream() {
-        return ((PrintStream) streams.get());
+    	PrintStream result = (PrintStream) streams.get();
+    	return ((result == null) ? defaultPrintStream : result);
     }
 
 //  BEGIN delegated java.io.PrintStream methods

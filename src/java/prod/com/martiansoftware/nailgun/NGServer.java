@@ -20,8 +20,10 @@ package com.martiansoftware.nailgun;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Map;
 
@@ -42,6 +44,7 @@ public class NGServer implements Runnable {
 	 */
 	public static final int DEFAULT_PORT = 2113;
 	
+	private InetAddress addr = null;
 	private int port = 0;
 	private ServerSocket serversocket;
 	private boolean shutdown = false;
@@ -67,13 +70,17 @@ public class NGServer implements Runnable {
 	private Map allNailStats = null;
 	
 	/**
-	 * Creates a new NGServer that will listen on the specified port.
+	 * Creates a new NGServer that will listen at the specified address and
+	 * on the specified port.
 	 * This does <b>not</b> cause the server to start listening.  To do
 	 * so, create a new <code>Thread</code> wrapping this <code>NGServer</code>
 	 * and start it.
+	 * @param addr the address at which to listen, or <code>null</code> to bind
+	 * to all local addresses
 	 * @param port the port on which to listen.
 	 */
-	public NGServer(int port) {
+	public NGServer(InetAddress addr, int port) {
+		this.addr = addr;
 		this.port = port;
 		init();
 	}
@@ -86,6 +93,7 @@ public class NGServer implements Runnable {
 	 * and start it.
 	 */
 	public NGServer() {
+		this.addr = null;
 		this.port = DEFAULT_PORT;
 		init();
 	}
@@ -221,7 +229,7 @@ public class NGServer implements Runnable {
 	 * @return the port on which this server is (or will be) listening.
 	 */
 	public int getPort() {
-		return (port);
+		return ((serversocket == null) ? port : serversocket.getLocalPort());
 	}
 	
 	/**
@@ -233,14 +241,18 @@ public class NGServer implements Runnable {
 		
 		synchronized(System.in) {
 			if (!(System.in instanceof ThreadLocalInputStream)) {
-				System.setIn(new ThreadLocalInputStream(System.in));
-				System.setOut(new ThreadLocalPrintStream(System.out));
-				System.setErr(new ThreadLocalPrintStream(System.err));				
+				System.setIn(new ThreadLocalInputStream(in));
+				System.setOut(new ThreadLocalPrintStream(out));
+				System.setErr(new ThreadLocalPrintStream(err));				
 			}
 		}
 		
 		try {
-			serversocket = new ServerSocket(port);
+			if (addr == null) {
+				serversocket = new ServerSocket(port);
+			} else {
+				serversocket = new ServerSocket(port, 0, addr);
+			}
 			
 			while (!shutdown) {
 				// get the new thread ready to go so the client
@@ -265,7 +277,10 @@ public class NGServer implements Runnable {
 	}
 	
 	private static void usage() {
-		
+		System.err.println("Usage: java com.martiansoftware.nailgun.NGServer");
+		System.err.println("   or: java com.martiansoftware.nailgun.NGServer port");
+		System.err.println("   or: java com.martiansoftware.nailgun.NGServer IPAddress");
+		System.err.println("   or: java com.martiansoftware.nailgun.NGServer IPAddress:port");
 	}
 	
 	/**
@@ -275,20 +290,62 @@ public class NGServer implements Runnable {
 	 * @param args a single optional argument specifying the port on which to listen.
 	 * @throws NumberFormatException if a non-numeric port is specified
 	 */
-	public static void main(String[] args) throws NumberFormatException {
+	public static void main(String[] args) throws NumberFormatException, UnknownHostException {
 		if (args.length > 1) {
 			usage();
 			return;
 		}
-		
+
+		// null server address means bind to everything local
+		InetAddress serverAddress = null;
 		int port = DEFAULT_PORT;
+		
+		// parse the sole command line parameter, which
+		// may be an inetaddress to bind to, a port number,
+		// or an inetaddress followed by a port, separated
+		// by a colon
 		if (args.length != 0) {
-			port = Integer.parseInt(args[0]);
+			String[] argParts = args[0].split(":");
+			String addrPart = null;
+			String portPart = null;
+			if (argParts.length == 2) {
+				addrPart = argParts[0];
+				portPart = argParts[1];
+			} else if (argParts[0].indexOf('.') >= 0) {
+				addrPart = argParts[0];
+			} else {
+				portPart = argParts[0];
+			}
+			if (addrPart != null) {
+				serverAddress = InetAddress.getByName(addrPart);
+			}
+			if (portPart != null) {
+				port = Integer.parseInt(portPart);
+			}
 		}
 
-		NGServer server = new NGServer(port);
-		new Thread(server).start();
-		System.out.println("NGServer started on port " + port + ".");
+		NGServer server = new NGServer(serverAddress, port);
+		
+		Thread t = new Thread(server);
+		t.setName("NGServer(" + serverAddress + ", " + port + ")");
+		t.start();
+
+		// if the port is 0, it will be automatically determined.
+		// add this little wait so the ServerSocket can fully
+		// initialize and we can see what port it chose.
+		int runningPort = server.getPort();
+		while (runningPort == 0) {
+			try { Thread.sleep(50); } catch (Throwable toIgnore) {}
+			runningPort = server.getPort();
+		}
+		
+		System.out.print("NGServer started on "
+							+ ((serverAddress == null) 
+								? "all interfaces" 
+								: serverAddress.getHostAddress())
+		                    + ", port " 
+							+ runningPort 
+							+ ".");
 	}
 
 }

@@ -39,6 +39,8 @@ class ThreadLocalInputStream extends InputStream {
      */
     private InheritableThreadLocal streams = null;
 
+    private InputStream defaultInputStream = null;
+    
     /**
      * @param defaultInputStream the InputStream that will be used if the
      * current thread has not called init()
@@ -46,7 +48,8 @@ class ThreadLocalInputStream extends InputStream {
     ThreadLocalInputStream(InputStream defaultInputStream) {
         super();
         streams = new InheritableThreadLocal();
-        init(defaultInputStream);
+        this.defaultInputStream = defaultInputStream;
+        init(null);
     }
 
     /**
@@ -62,7 +65,8 @@ class ThreadLocalInputStream extends InputStream {
      * @return this thread's InputStream
      */
     InputStream getInputStream() {
-        return ((InputStream) streams.get());
+    	InputStream result = (InputStream) streams.get();
+    	return ((result == null) ? defaultInputStream : result);
     }
 
 //  BEGIN delegated java.io.InputStream methods
