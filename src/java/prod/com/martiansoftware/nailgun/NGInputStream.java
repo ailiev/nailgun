@@ -112,7 +112,7 @@ class NGInputStream extends FilterInputStream {
 
 		int bytesToRead = Math.min((int) remaining, length);
 		int result = in.read(b, offset, bytesToRead);
-		remaining -= bytesToRead;
+		remaining -= result;
 		return (result);
 	}
 
