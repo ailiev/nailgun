@@ -6,5 +6,5 @@ including a "Quick Start" guide, visit:
 
 	http://www.martiansoftware.com/nailgun
 	
-Javadocs for NailGun are in the "docs/api" directory with this
-distribution.
+Javadocs for NailGun are in the "docs/api" directory with the
+source distribution, and are also available at the above website.

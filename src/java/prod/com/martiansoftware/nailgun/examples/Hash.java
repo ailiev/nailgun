@@ -79,7 +79,7 @@ public class Hash {
     public static void nailMain(NGContext context) throws java.security.NoSuchAlgorithmException, java.io.IOException {
     	String[] args = context.getArgs();
     	
-    	if ("?".equals(args[0])) {
+    	if (args.length == 0) {
         	// display available algorithms
     		Set algs = getCryptoImpls("MessageDigest");
     		for (Iterator i = algs.iterator(); i.hasNext();) {

@@ -21,6 +21,7 @@
 	<property name="version" value="0.6"/>
 	<property name="jar" value="nailgun-${version}.jar"/>
 	<property name="jar.examples" value="nailgun-examples-${version}.jar"/>
+	<property name="zip.src" value="nailgun-src-${version}.zip"/>
 	<property name="zip" value="nailgun-${version}.zip"/>
 		
 	<property name="src.java.prod" value="src/java/prod"/>
@@ -173,8 +174,14 @@
 	</target>
 	
 	<target name="dist" depends="jar, docs">
-		<zip destfile="${dist}/${zip}">
+		<delete file="${dist}/${zip.src}"/>
+		<delete file="${dist}/${zip}"/>
+		<zip destfile="${dist}/${zip.src}">
 		    <zipfileset dir="." prefix="nailgun-${version}" excludes="ng,jcoverage.ser,dist/**"/>
+			<zipfileset dir="dist" prefix="nailgun-${version}" includes="${jar},${jar.examples}"/>
+		</zip>
+		<zip destfile="${dist}/${zip}">
+			<zipfileset dir="." prefix="nailgun-${version}" includes="README.txt,Makefile,src/c/**"/>
 			<zipfileset dir="dist" prefix="nailgun-${version}" includes="${jar},${jar.examples}"/>
 		</zip>
 	</target>
