@@ -1,3 +1,6 @@
+To compile the nailgun client on systems with gcc and make,
+type "make" in the project directory.
+
 Documentation is under development.  For up-to-date information,
 including a "Quick Start" guide, visit:
 
