@@ -18,7 +18,18 @@
 	to a limit of ten.
 	
 	Added --nailgun-version command line option to client to
-	display client version.
+	display client version and exit.
+	
+	Added --nailgun-showversion command line option to client to
+	display client version and continue.
+
+	Added --nailgun-help command line option to client to
+	display usage information.
+
+	Added client reporting of local file and path separators via remote
+	environment chunks.
+	
+	Improved usage info display.
 	
 	Added ng-version built-in nail to display server version.
 	
