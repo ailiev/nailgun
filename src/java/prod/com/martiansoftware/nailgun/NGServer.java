@@ -139,6 +139,9 @@ public class NGServer implements Runnable {
 	 * @param port the port on which to listen
 	 */
 	private void init(InetAddress addr, int port) {
+		this.addr = addr;
+		this.port = port;
+		
 		this.aliasManager = new AliasManager();
 		allNailStats = new java.util.HashMap();
 		// allow a maximum of 10 idle threads.  probably too high a number
