@@ -37,6 +37,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define NAILGUN_VERSION "0.7"
+
 #define BUFSIZE (2048)
 
 #ifdef WIN32
@@ -441,7 +443,7 @@ void usage() {
 }
 
 int main(int argc, char *argv[], char *env[]) {
-  int i;
+  int i, showedVersion;
   struct sockaddr_in server_addr;
   char *nailgun_server;        /* server as specified by user */
   char *nailgun_port;          /* port as specified by user */
@@ -489,6 +491,7 @@ int main(int argc, char *argv[], char *env[]) {
      --nailgun-port) and NULL them and their parameters after
      reading them if found.  later, when we send args to the
      server, skip the null args. */
+  showedVersion = 0;
   for (i = 1; i < argc; ++i) {
     if (!strcmp("--nailgun-server", argv[i])) {
       if (i == argc - 1) usage();
@@ -500,13 +503,22 @@ int main(int argc, char *argv[], char *env[]) {
       nailgun_port = argv[i + 1];
       argv[i] = argv[i + 1]= NULL;
       ++i;
+    } else if (!strcmp("--nailgun-version", argv[i])) {
+      printf("NailGun client version %s\n", NAILGUN_VERSION);
+      argv[i] = NULL;
+      showedVersion = 1;
     } else if (cmd == NULL) {
       cmd = argv[i];
       firstArgIndex = i + 1;
     }
   }
 
-  if (cmd == NULL) usage();
+  /* if there's no command, we should only display usage info
+     if the version number was not displayed. */
+  if (cmd == NULL) {
+    if (showedVersion) return(0);
+    usage();
+  }
   
   /* jump through a series of connection hoops */  
   hostinfo = gethostbyname(nailgun_server);

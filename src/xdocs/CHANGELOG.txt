@@ -17,6 +17,11 @@
 	Added thread pooling for running nails.  Pool is currently hardcoded
 	to a limit of ten.
 	
+	Added --nailgun-version command line option to client to
+	display client version.
+	
+	Added ng-version built-in nail to display server version.
+	
 	InvocationTargetExceptions on Nails now re-throw their cause
 	for more useful information.
 
