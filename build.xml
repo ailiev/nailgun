@@ -18,7 +18,7 @@
 
 <project basedir="." default="dist" name="nailgun">
 	
-	<property name="version" value="0.7"/>
+	<property name="version" value="0.7.1"/>
 	<property name="jar" value="nailgun-${version}.jar"/>
 	<property name="jar.examples" value="nailgun-examples-${version}.jar"/>
 	<property name="zip.src" value="nailgun-src-${version}.zip"/>

@@ -37,7 +37,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define NAILGUN_VERSION "0.7"
+#define NAILGUN_VERSION "0.7.1"
 
 #define BUFSIZE (2048)
 
