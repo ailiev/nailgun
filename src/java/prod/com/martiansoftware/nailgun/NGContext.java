@@ -34,7 +34,7 @@ import java.util.Properties;
  * If a class is written with a
  * 
  * <pre><code>
- * public static void nailMail(NGContext context)
+ * public static void nailMain(NGContext context)
  * </code></pre>
  * 
  * method, that method will be called by NailGun instead of the traditional

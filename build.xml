@@ -184,12 +184,12 @@
 	
 	<target name="jar" depends="test">
 		<mkdir dir="${dist}"/>
-		<jar basedir="${build.prod}" destfile="${dist}/${jar}" excludes="com/martiansoftware/nailgun/examples/**">
+		<jar basedir="${build.prod}" destfile="${dist}/${jar}" excludes="com/martiansoftware/nailgun/examples/**,**/*.java">
 			<manifest>
 				<attribute name="Main-Class" value="com.martiansoftware.nailgun.NGServer"/>
 			</manifest>
 		</jar>
-		<jar basedir="${build.prod}" destfile="${dist}/${jar.examples}" includes="com/martiansoftware/nailgun/examples/**"/>
+		<jar basedir="${build.prod}" destfile="${dist}/${jar.examples}" includes="com/martiansoftware/nailgun/examples/**" excludes="**/*.java"/>
 	</target>
 	
 	<target name="javadoc" depends="compile-server">
@@ -218,7 +218,7 @@
 		<delete file="${dist}/${zip.src}"/>
 		<delete file="${dist}/${zip}"/>
 		<zip destfile="${dist}/${zip.src}">
-		    <zipfileset dir="." prefix="nailgun-${version}" excludes="ng,jcoverage.ser,dist/**"/>
+		    <zipfileset dir="." prefix="nailgun-${version}" excludes="ng,jcoverage.ser,build/**,dist/**"/>
 			<zipfileset dir="dist" prefix="nailgun-${version}" includes="${jar},${jar.examples}"/>
 		</zip>
 		<zip destfile="${dist}/${zip}">

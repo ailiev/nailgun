@@ -1,6 +1,5 @@
-0.6.1
-	Added windows binary to build process (win32 port contributed
-	by Pete Kirkham).
+v 0.7 (January 3, 2005)
+	Added windows binary compilation to build process.
 
 	Added IP Address specification to NGServer commandline (to
 	override default behavior of binding to all addresses).
@@ -43,5 +42,5 @@
 	
 	Fixed a bug that caused a segfault if ng is invoked with no arguments.
 	
-0.6	November 21, 2004
+v 0.6 (November 21, 2004)
 	Initial Release
