@@ -31,7 +31,6 @@ public class NGStop {
 
 	public static void nailMain(NGContext context) {
 		context.getNGServer().shutdown(true);
-		context.out.println("Server shut down.");
 	}
 
 }

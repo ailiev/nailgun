@@ -109,6 +109,11 @@ public class NGServer implements Runnable {
 	private Map allNailStats = null;
 	
 	/**
+	 * Remember the security manager we start with so we can restore it later
+	 */
+	private SecurityManager originalSecurityManager = null;
+	
+	/**
 	 * Creates a new NGServer that will listen at the specified address and
 	 * on the specified port.
 	 * This does <b>not</b> cause the server to start listening.  To do
@@ -275,7 +280,11 @@ public class NGServer implements Runnable {
 	 * implicitly launched by your nails.
 	 */
 	public void shutdown(boolean exitVM) {
-		shutdown = true;
+		synchronized(this) {
+			if (shutdown) return;
+			shutdown = true;
+		}
+		
 		try {
 			serversocket.close();
 		} catch (Throwable toDiscard) {}
@@ -298,6 +307,9 @@ public class NGServer implements Runnable {
 			for (Iterator i = allNailStats.values().iterator(); i.hasNext();) {
 				NailStats ns = (NailStats) i.next();
 				Class nailClass = ns.getNailClass();
+				
+				// yes, I know this is lazy, relying upon the exception
+				// to handle the case of no nailShutdown method.
 				try {
 					Method nailShutdown = nailClass.getMethod("nailShutdown", argTypes);
 					nailShutdown.invoke(null, argValues);
@@ -309,6 +321,9 @@ public class NGServer implements Runnable {
 		System.setIn(in);
 		System.setOut(out);
 		System.setErr(err);
+		
+		System.setSecurityManager(originalSecurityManager);
+		
 		if (exitVM) {
 			System.exit(0);
 		}
@@ -338,6 +353,12 @@ public class NGServer implements Runnable {
 		running = true;
 		NGSession sessionOnDeck = null;
 		
+		originalSecurityManager = System.getSecurityManager();
+        System.setSecurityManager(
+                new NGSecurityManager(
+                        originalSecurityManager));
+  
+
 		synchronized(System.in) {
 			if (!(System.in instanceof ThreadLocalInputStream)) {
 				System.setIn(new ThreadLocalInputStream(in));
@@ -462,6 +483,7 @@ public class NGServer implements Runnable {
 		
 		
 		public void run() {
+			
 			int count = 0;
 			server.shutdown(false);
 			
@@ -469,6 +491,7 @@ public class NGServer implements Runnable {
 			// remember that the shutdown will call nailShutdown in any
 			// nails as well
 			while (server.isRunning() && (count < 50)) {
+
 				try {Thread.sleep(100);} catch(InterruptedException e) {}
 				++count;
 			}

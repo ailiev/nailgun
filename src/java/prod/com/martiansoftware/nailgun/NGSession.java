@@ -26,6 +26,8 @@ import java.net.Socket;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.tools.ant.ExitException;
+
 /**
  * Reads the NailGun stream from the client through the command,
  * then hands off processing to the appropriate class.  The NGSession
@@ -286,6 +288,8 @@ class NGSession extends Thread {
 					
 					if (mainMethod != null) {
 						server.nailStarted(cmdclass);
+                        NGSecurityManager.setExit(exit);
+
 						try {
 							mainMethod.invoke(null, methodArgs);
 						} catch (InvocationTargetException ite) {
@@ -297,7 +301,10 @@ class NGSession extends Thread {
 						}
 						exit.println(0);
 					}
-	
+
+				} catch (ExitException exitEx) {
+                    exit.println(exitEx.getStatus());
+                    server.out.println(Thread.currentThread().getName() + " exited with status " + exitEx.getStatus());
 				} catch (Throwable t) {
 					t.printStackTrace();
 					exit.println(NGConstants.EXIT_EXCEPTION); // remote exception constant
