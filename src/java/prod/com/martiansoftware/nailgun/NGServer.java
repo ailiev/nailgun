@@ -145,7 +145,7 @@ public class NGServer implements Runnable {
 		this.aliasManager = new AliasManager();
 		allNailStats = new java.util.HashMap();
 		// allow a maximum of 10 idle threads.  probably too high a number
-		// and definitely should be configurable
+		// and definitely should be configurable in the future
 		sessionPool = new NGSessionPool(this, 10);
 	}
 

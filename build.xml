@@ -18,7 +18,7 @@
 
 <project basedir="." default="dist" name="nailgun">
 	
-	<property name="version" value="0.6.1"/>
+	<property name="version" value="0.7"/>
 	<property name="jar" value="nailgun-${version}.jar"/>
 	<property name="jar.examples" value="nailgun-examples-${version}.jar"/>
 	<property name="zip.src" value="nailgun-src-${version}.zip"/>
@@ -86,7 +86,14 @@
 	</target>
 		
 	<target name="compile-client">
-		<exec executable="make"/>
+		<exec executable="make">
+			<arg line="ng"/>
+
+			<!-- this next line will only work if you have
+				 MinGW32 installed.  See makefile for link
+				 to installer script. -->
+			<arg line="ng.exe"/>
+		</exec>
 	</target>
 		
 	<target name="instrument" depends="compile-server">
@@ -181,7 +188,7 @@
 			<zipfileset dir="dist" prefix="nailgun-${version}" includes="${jar},${jar.examples}"/>
 		</zip>
 		<zip destfile="${dist}/${zip}">
-			<zipfileset dir="." prefix="nailgun-${version}" includes="README.txt,Makefile,src/c/**"/>
+			<zipfileset dir="." prefix="nailgun-${version}" includes="README.txt,Makefile,ng.exe,src/c/**"/>
 			<zipfileset dir="dist" prefix="nailgun-${version}" includes="${jar},${jar.examples}"/>
 		</zip>
 	</target>

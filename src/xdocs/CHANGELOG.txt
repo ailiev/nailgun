@@ -1,0 +1,31 @@
+0.6.1
+	Added windows binary to build process (win32 port contributed
+	by Pete Kirkham).
+
+	Added IP Address specification to NGServer commandline (to
+	override default behavior of binding to all addresses).
+
+	Added automatic port selection to NGServer (by specifying
+	port 0).  Selected port is displayed to System.out at startup.
+
+	Added ability to specify a default Nail to run if an invalid
+	alias/classname is specified by the client.
+	
+	Added ability to disable classname resolution in NGServer, forcing
+	users to run Nails only by alias if disabled.
+	
+	Added thread pooling for running nails.  Pool is currently hardcoded
+	to a limit of ten.
+	
+	InvocationTargetExceptions on Nails now re-throw their cause
+	for more useful information.
+
+	Added shutdown hook for clean shutdown after Ctrl-C on NGServer.
+	
+	Fixed a bug in ThreadLocalInputStream and ThreadLocalOutputStream
+	that resulted in the ignoring of defaults.
+	
+	Fixed a bug that caused a segfault if ng is invoked with no arguments.
+	
+0.6	November 21, 2004
+	Initial Release

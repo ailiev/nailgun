@@ -506,6 +506,8 @@ int main(int argc, char *argv[], char *env[]) {
     }
   }
 
+  if (cmd == NULL) usage();
+  
   /* jump through a series of connection hoops */  
   hostinfo = gethostbyname(nailgun_server);
 
@@ -548,7 +550,6 @@ int main(int argc, char *argv[], char *env[]) {
   
   /* now send the working directory */
   cwd = getcwd(NULL, 0);
-
   sendText(CHUNKTYPE_DIR, cwd);
   free(cwd);
   
