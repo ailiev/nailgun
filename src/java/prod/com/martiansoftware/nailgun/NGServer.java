@@ -22,10 +22,11 @@ import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Map;
+
+import com.martiansoftware.nailgun.builtins.DefaultNail;
 
 /**
  * <p>Listens for new connections from NailGun clients and launches
@@ -50,6 +51,9 @@ public class NGServer implements Runnable {
 	private boolean shutdown = false;
 	private boolean running = false;
 	private AliasManager aliasManager;
+	private boolean allowNailsByClassName = true;
+	private Class defaultNailClass = null;
+	private NGSessionRunner sessionRunner = null;
 	
 	/**
 	 * <code>System.out</code> at the time of the NGServer's creation
@@ -80,9 +84,7 @@ public class NGServer implements Runnable {
 	 * @param port the port on which to listen.
 	 */
 	public NGServer(InetAddress addr, int port) {
-		this.addr = addr;
-		this.port = port;
-		init();
+		init(addr, port);
 	}
 	
 	/**
@@ -93,20 +95,62 @@ public class NGServer implements Runnable {
 	 * and start it.
 	 */
 	public NGServer() {
-		this.addr = null;
-		this.port = DEFAULT_PORT;
-		init();
+		init(null, DEFAULT_PORT);
 	}
 	
 	/**
 	 * Sets up the NGServer internals
-	 *
+	 * @param addr the InetAddress to bind to
+	 * @param port the port on which to listen
 	 */
-	private void init() {
+	private void init(InetAddress addr, int port) {
 		this.aliasManager = new AliasManager();
 		allNailStats = new java.util.HashMap();
+		sessionRunner = new NGSessionRunner(this, 10);
 	}
 
+	/**
+	 * Sets a flag that determines whether Nails can be executed by class name.
+	 * If this is false, Nails can only be run via aliases (and you should
+	 * probably remove ng-alias from the AliasManager).
+	 * 
+	 * @param allowNailsByClassName true iff Nail lookups by classname are allowed
+	 */
+	public void setAllowNailsByClassName(boolean allowNailsByClassName) {
+		this.allowNailsByClassName = allowNailsByClassName;
+	}
+	
+	/**
+	 * Returns a flag that indicates whether Nail lookups by classname
+	 * are allowed.  If this is false, Nails can only be run via aliases.
+	 * @return a flag that indicates whether Nail lookups by classname
+	 * are allowed.
+	 */
+	public boolean allowsNailsByClassName() {
+		return (allowNailsByClassName);
+	}
+	
+	/**
+	 * Sets the default class to use for the Nail if no Nails can
+	 * be found via alias or classname. (may be <code>null</code>)
+	 * @param defaultNailClass the default class to use for the Nail
+	 * if no Nails can be found via alias or classname.
+	 * (may be <code>null</code>)
+	 */
+	public void setDefaultNailClass(Class defaultNailClass) {
+		this.defaultNailClass = defaultNailClass;
+	}
+	
+	/**
+	 * Returns the default class to use for the Nail if no Nails
+	 * can be found via alias or classname.
+	 * @return the default class to use for the Nail if no Nails
+	 * can be found via alias or classname.
+	 */
+	public Class getDefaultNailClass() {
+		return ((defaultNailClass == null) ? DefaultNail.class : defaultNailClass) ;
+	}
+	
 	private NailStats getOrCreateStatsFor(Class nailClass) {
 		NailStats result = null;
 		synchronized(allNailStats) {
@@ -130,13 +174,11 @@ public class NGServer implements Runnable {
 	void nailStarted(Class nailClass) {
 		NailStats stats = getOrCreateStatsFor(nailClass);
 		stats.nailStarted();
-//		out.println(stats);
 	}
 	
 	void nailFinished(Class nailClass) {
 		NailStats stats = (NailStats) allNailStats.get(nailClass);
 		stats.nailFinished();
-//		out.println(stats);
 	}
 	
 	/**
@@ -183,6 +225,8 @@ public class NGServer implements Runnable {
 		try {
 			serversocket.close();
 		} catch (Throwable toDiscard) {}
+		
+		sessionRunner.shutdown();
 		
 		Class[] argTypes = new Class[1];
 		argTypes[0] = NGServer.class;
@@ -255,16 +299,10 @@ public class NGServer implements Runnable {
 			}
 			
 			while (!shutdown) {
-				// get the new thread ready to go so the client
-				// doesn't have to wait longer than necessary
-				NGSession nextSession = new NGSession();
-				Thread nextSessionThread = new Thread(nextSession);
-				nextSessionThread.setName("NGSession on deck");
-				Socket s = serversocket.accept();
-				nextSession.init(this, s);
-				nextSessionThread.start();
+				sessionRunner.startSessionFor(serversocket.accept());
 				Thread.yield();
 			}
+
 		} catch (Throwable t) {
 			// if shutdown is called while the accept() method is blocking,
 			// an exception will be thrown that we don't care about.  filter
@@ -291,6 +329,7 @@ public class NGServer implements Runnable {
 	 * @throws NumberFormatException if a non-numeric port is specified
 	 */
 	public static void main(String[] args) throws NumberFormatException, UnknownHostException {
+
 		if (args.length > 1) {
 			usage();
 			return;
@@ -325,11 +364,12 @@ public class NGServer implements Runnable {
 		}
 
 		NGServer server = new NGServer(serverAddress, port);
-		
 		Thread t = new Thread(server);
 		t.setName("NGServer(" + serverAddress + ", " + port + ")");
 		t.start();
 
+		Runtime.getRuntime().addShutdownHook(new NGServerShutdowner(server));
+		
 		// if the port is 0, it will be automatically determined.
 		// add this little wait so the ServerSocket can fully
 		// initialize and we can see what port it chose.
@@ -339,7 +379,7 @@ public class NGServer implements Runnable {
 			runningPort = server.getPort();
 		}
 		
-		System.out.print("NGServer started on "
+		System.out.println("NGServer started on "
 							+ ((serverAddress == null) 
 								? "all interfaces" 
 								: serverAddress.getHostAddress())
@@ -348,4 +388,31 @@ public class NGServer implements Runnable {
 							+ ".");
 	}
 
+	private static class NGServerShutdowner extends Thread {
+		private NGServer server = null;
+		
+		NGServerShutdowner(NGServer server) {
+			this.server = server;
+		}
+		
+		
+		public void run() {
+			int count = 0;
+			server.shutdown(false);
+			
+			// give the server up to five seconds to stop.  is that enough?
+			// remember that the shutdown will call nailShutdown in any
+			// nails as well
+			while (server.isRunning() && (count < 50)) {
+				try {Thread.sleep(100);} catch(InterruptedException e) {}
+				++count;
+			}
+			
+			if (server.isRunning()) {
+				System.err.println("Unable to cleanly shutdown server.  Exiting JVM Anyway.");
+			} else {
+				System.out.println("NGServer shut down.");
+			}
+		}
+	}
 }
