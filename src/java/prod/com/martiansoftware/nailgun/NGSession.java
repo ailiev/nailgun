@@ -26,27 +26,72 @@ import java.net.Socket;
 import java.util.List;
 import java.util.Properties;
 
-import com.martiansoftware.nailgun.builtins.DefaultNail;
-
 /**
  * Reads the NailGun stream from the client through the command,
  * then hands off processing to the appropriate class.  The NGSession
- * obtains its sockets from an NGSessionRunner, which created this
- * NGSession as part of a pool.
+ * obtains its sockets from an NGSessionPool, which created this
+ * NGSession.
  * 
  * @author <a href="http://www.martiansoftware.com/contact.html">Marty Lamb</a>
  */
-class NGSession implements Runnable {
+class NGSession extends Thread {
 
+	/**
+	 * The server this NGSession is working for
+	 */
 	private NGServer server = null;
-	private NGSessionRunner sessionRunner = null;
-	private int index = 0;
 	
-	// signatures of main(String[]) and nailMain(NGContext) for reflection
+	/**
+	 * The pool this NGSession came from, and to which it will
+	 * return itself
+	 */
+	private NGSessionPool sessionPool = null;
+	
+	/**
+	 * Synchronization object
+	 */
+	private Object lock = new Object();
+
+	/**
+	 * The next socket this NGSession has been tasked with processing
+	 * (by NGServer)
+	 */
+	private Socket nextSocket = null;
+	
+	/**
+	 * True if the server has been shutdown and this NGSession should
+	 * terminate completely
+	 */
+	private boolean done = false;
+	
+	/**
+	 * The instance number of this NGSession.  That is, if this is the Nth
+	 * NGSession to be created, then this is the value for N.
+	 */
+	private long instanceNumber = 0;
+
+	/**
+	 * A lock shared among all NGSessions
+	 */
+	private static Object sharedLock = new Object();
+	
+	/**
+	 * The instance counter shared among all NGSessions
+	 */
+	private static long instanceCounter = 0;
+	
+	/**
+	 * signature of main(String[]) for reflection operations
+	 */
 	private static Class[] mainSignature;
+
+	/**
+	 * signature of nailMain(NGContext) for reflection operations
+	 */
 	private static Class[] nailMainSignature;
 	
 	static {
+		// initialize the signatures
 		mainSignature = new Class[1];
 		mainSignature[0] = String[].class;
 		
@@ -55,26 +100,80 @@ class NGSession implements Runnable {
 	}
 	
 	/**
-	 * Creates a new NGSession running for the specified NGSessionRunner and
+	 * Creates a new NGSession running for the specified NGSessionPool and
 	 * NGServer.
-	 * @param sessionRunner The NGSessionRunner we're working for
+	 * @param sessionPool The NGSessionPool we're working for
 	 * @param server The NGServer we're working for
-	 * @param index this Runnable's index in the thread pool
 	 */
-	NGSession(NGSessionRunner sessionRunner, NGServer server, int index) {
+	NGSession(NGSessionPool sessionPool, NGServer server) {
 		super();
-		this.sessionRunner = sessionRunner;
+		this.sessionPool = sessionPool;
 		this.server = server;
-		this.index = index;
+	
+		synchronized(sharedLock) {
+			this.instanceNumber = ++instanceCounter;
+		}
+//		server.out.println("Created NGSession " + instanceNumber);
 	}
 
 	/**
-	 * Runs the nail.
+	 * Shuts down this NGSession gracefully
+	 */
+	void shutdown() {
+		done = true;
+		synchronized(lock) {
+			nextSocket = null;
+			lock.notifyAll();
+		}
+	}
+
+	/**
+	 * Instructs this NGSession to process the specified socket, after which
+	 * this NGSession will return itself to the pool from which it came.
+	 * @param socket the socket (connected to a client) to process
+	 */
+	public void run(Socket socket) {
+		synchronized(lock) {
+			nextSocket = socket;
+			lock.notify();
+		}
+		Thread.yield();
+	}
+	
+	/**
+	 * Returns the next socket to process.  This will block the NGSession
+	 * thread until there's a socket to process or the NGSession has been
+	 * shut down.
+	 * 
+	 * @return the next socket to process, or <code>null</code> if the NGSession
+	 * has been shut down.
+	 */
+	private Socket nextSocket() {
+		Socket result = null;
+		synchronized(lock) {
+			result = nextSocket;
+			while (!done && result == null) {
+				try {
+					lock.wait();
+				} catch (InterruptedException e) {
+					done = true;
+				}
+				result = nextSocket;
+			}
+			nextSocket = null;
+		}
+		return (result);
+	}
+	
+	/**
+	 * The main NGSession loop.  This gets the next socket to process, runs
+	 * the nail for the socket, and loops until shut down.
 	 */
 	public void run() {
 	
 		updateThreadName(null);
-		Socket socket = sessionRunner.getSocket();
+		
+		Socket socket = nextSocket();
 		while (socket != null) {
 			try {
 				// buffer for reading headers
@@ -82,12 +181,14 @@ class NGSession implements Runnable {
 				java.io.DataInputStream sockin = new java.io.DataInputStream(socket.getInputStream());
 				java.io.OutputStream sockout = socket.getOutputStream();
 	
-				// client info
+				// client info - command line arguments and environment
 				List remoteArgs = new java.util.ArrayList();
 				Properties remoteEnv = new Properties();
 				
-				String cwd = null;
-				String command = null;
+				String cwd = null;			// working directory
+				String command = null;		// alias or class name
+				
+				// read everything from the client up to and including the command
 				while (command == null) {
 					sockin.readFully(lbuf);
 					long bytesToRead = LongUtils.fromArray(lbuf, 0);
@@ -98,40 +199,52 @@ class NGSession implements Runnable {
 					String line = new String(b, "US-ASCII");
 	
 					switch(chunkType) {
-						case 'A':	remoteArgs.add(line);
+									
+						case NGConstants.CHUNKTYPE_ARGUMENT:
+									//	command line argument
+									remoteArgs.add(line);
 									break;
-						case 'E':	int equalsIndex = line.indexOf('=');
+
+						case NGConstants.CHUNKTYPE_ENVIRONMENT:
+									//	parse environment into property
+									int equalsIndex = line.indexOf('=');
 									if (equalsIndex > 0) {
 										remoteEnv.setProperty(
 												line.substring(0, equalsIndex),
 												line.substring(equalsIndex + 1));
 									}
 									String key = line.substring(0, equalsIndex);
-						// parse environment into property
 									break;
-						case 'C':	command = line;
+									
+						case NGConstants.CHUNKTYPE_COMMAND:
+									// 	command (alias or classname)
+									command = line;
 									break;
-						case 'D':	cwd = line;
+									
+						case NGConstants.CHUNKTYPE_WORKINGDIRECTORY:
+									//	client working directory
+									cwd = line;
 									break;
-						default:	// freakout
+									
+						default:	// freakout?
 					}
 				}
 	
 				updateThreadName(socket.getInetAddress().getHostAddress() + ": " + command);
 				
-				// can't create NGInputStream until we've received a command.
+				// can't create NGInputStream until we've received a command, because at
+				// that point the stream from the client will only include stdin and stdin-eof
+				// chunks
 				InputStream in = new NGInputStream(sockin);
-				PrintStream out = new PrintStream(new NGOutputStream(sockout, '1'));
-				PrintStream err = new PrintStream(new NGOutputStream(sockout, '2'));
-				PrintStream exit = new PrintStream(new NGOutputStream(sockout, 'X'));
+				PrintStream out = new PrintStream(new NGOutputStream(sockout, NGConstants.CHUNKTYPE_STDOUT));
+				PrintStream err = new PrintStream(new NGOutputStream(sockout, NGConstants.CHUNKTYPE_STDERR));
+				PrintStream exit = new PrintStream(new NGOutputStream(sockout, NGConstants.CHUNKTYPE_EXIT));
 	
-				// set streams for server side
+				// ThreadLocal streams for System.in/out/err redirection
 				((ThreadLocalInputStream) System.in).init(in);
 				((ThreadLocalPrintStream) System.out).init(out);
 				((ThreadLocalPrintStream) System.err).init(err);
 				
-	
-				// TODO: add alias lookup
 				try {
 					Alias alias = server.getAliasManager().getAlias(command);
 					Class cmdclass = null;
@@ -144,7 +257,7 @@ class NGSession implements Runnable {
 					}
 
 					Object[] methodArgs = new Object[1];
-					Method mainMethod = null;
+					Method mainMethod = null; // will be either main(String[]) or nailMain(NGContext)
 					String[] cmdlineArgs = (String[]) remoteArgs.toArray(new String[remoteArgs.size()]);
 					
 					try {
@@ -201,14 +314,17 @@ class NGSession implements Runnable {
 			((ThreadLocalPrintStream) System.err).init(null);
 			
 			updateThreadName(null);
-			socket = sessionRunner.getSocket();
+			sessionPool.give(this);
+			socket = nextSocket();
 		}
+
+//		server.out.println("Shutdown NGSession " + instanceNumber);
 	}
 	
 	/**
 	 * Updates the current thread name (useful for debugging).
 	 */
 	private void updateThreadName(String detail) {
-		Thread.currentThread().setName("NGSession " + index + ": " + ((detail == null) ? "(idle)" : detail));
+		setName("NGSession " + instanceNumber + ": " + ((detail == null) ? "(idle)" : detail));
 	}
 }

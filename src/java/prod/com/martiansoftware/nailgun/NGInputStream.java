@@ -62,10 +62,14 @@ class NGInputStream extends FilterInputStream {
 			bytesRead += thisPass;
 		}
 		switch(header[4]) {
-			case '0': 	remaining = LongUtils.fromArray(header, 0);
+			case NGConstants.CHUNKTYPE_STDIN:
+						remaining = LongUtils.fromArray(header, 0);
 						break;
-			case '.':	eof = true;
+						
+			case NGConstants.CHUNKTYPE_STDIN_EOF:
+						eof = true;
 						break;
+						
 			default:	throw(new IOException("Unknown stream type: " + (char) header[4]));
 		}		
 	}

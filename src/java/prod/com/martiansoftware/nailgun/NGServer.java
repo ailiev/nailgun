@@ -22,6 +22,7 @@ import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Map;
@@ -41,19 +42,51 @@ import com.martiansoftware.nailgun.builtins.DefaultNail;
 public class NGServer implements Runnable {
 
 	/**
-	 * The default NailGun port (2113)
+	 * The address on which to listen, or null to listen on all
+	 * local addresses
 	 */
-	public static final int DEFAULT_PORT = 2113;
-	
 	private InetAddress addr = null;
+	
+	/**
+	 * The port on which to listen, or zero to select a port automatically
+	 */
 	private int port = 0;
+	
+	/**
+	 * The socket doing the listening
+	 */
 	private ServerSocket serversocket;
+	
+	/**
+	 * True if this NGServer has received instructions to shut down
+	 */
 	private boolean shutdown = false;
+	
+	/**
+	 * True if this NGServer has been started and is accepting connections
+	 */
 	private boolean running = false;
+	
+	/**
+	 * This NGServer's AliasManager, which maps aliases to classes
+	 */
 	private AliasManager aliasManager;
+	
+	/**
+	 * If true, fully-qualified classnames are valid commands
+	 */
 	private boolean allowNailsByClassName = true;
+	
+	/**
+	 * The default class to use if an invalid alias or classname is
+	 * specified by the client.
+	 */
 	private Class defaultNailClass = null;
-	private NGSessionRunner sessionRunner = null;
+	
+	/**
+	 * A pool of NGSessions ready to handle client connections
+	 */
+	private NGSessionPool sessionPool = null;
 	
 	/**
 	 * <code>System.out</code> at the time of the NGServer's creation
@@ -70,7 +103,9 @@ public class NGServer implements Runnable {
 	 */
 	public final InputStream in = System.in;
 	
-	// a collection of all classes executed by this server so far
+	/**
+	 * a collection of all classes executed by this server so far
+	 */
 	private Map allNailStats = null;
 	
 	/**
@@ -89,13 +124,13 @@ public class NGServer implements Runnable {
 	
 	/**
 	 * Creates a new NGServer that will listen on the default port
-	 * (defined in <code>NGServer.DEFAULT_PORT</code>).
+	 * (defined in <code>NGConstants.DEFAULT_PORT</code>).
 	 * This does <b>not</b> cause the server to start listening.  To do
 	 * so, create a new <code>Thread</code> wrapping this <code>NGServer</code>
 	 * and start it.
 	 */
 	public NGServer() {
-		init(null, DEFAULT_PORT);
+		init(null, NGConstants.DEFAULT_PORT);
 	}
 	
 	/**
@@ -106,7 +141,9 @@ public class NGServer implements Runnable {
 	private void init(InetAddress addr, int port) {
 		this.aliasManager = new AliasManager();
 		allNailStats = new java.util.HashMap();
-		sessionRunner = new NGSessionRunner(this, 10);
+		// allow a maximum of 10 idle threads.  probably too high a number
+		// and definitely should be configurable
+		sessionPool = new NGSessionPool(this, 10);
 	}
 
 	/**
@@ -132,25 +169,33 @@ public class NGServer implements Runnable {
 	
 	/**
 	 * Sets the default class to use for the Nail if no Nails can
-	 * be found via alias or classname. (may be <code>null</code>)
+	 * be found via alias or classname. (may be <code>null</code>,
+	 * in which case NailGun will use its own default)
 	 * @param defaultNailClass the default class to use for the Nail
 	 * if no Nails can be found via alias or classname.
-	 * (may be <code>null</code>)
+	 * (may be <code>null</code>, in which case NailGun will use
+	 * its own default)
 	 */
 	public void setDefaultNailClass(Class defaultNailClass) {
 		this.defaultNailClass = defaultNailClass;
 	}
 	
 	/**
-	 * Returns the default class to use for the Nail if no Nails
+	 * Returns the default class that will be used if no Nails
 	 * can be found via alias or classname.
-	 * @return the default class to use for the Nail if no Nails
+	 * @return the default class that will be used if no Nails
 	 * can be found via alias or classname.
 	 */
 	public Class getDefaultNailClass() {
 		return ((defaultNailClass == null) ? DefaultNail.class : defaultNailClass) ;
 	}
 	
+	/**
+	 * Returns the current NailStats object for the specified class, creating
+	 * a new one if necessary
+	 * @param nailClass the class for which we're gathering stats
+	 * @return a NailStats object for the specified class
+	 */
 	private NailStats getOrCreateStatsFor(Class nailClass) {
 		NailStats result = null;
 		synchronized(allNailStats) {
@@ -164,18 +209,22 @@ public class NGServer implements Runnable {
 	}
 	
 	/**
-	 * Provides a means for an NGSession to register nail classes with
-	 * the server.  These classes may provide either a main or nailMain method.
-	 * When the NGServer shuts down, any classes with a static nailShutdown()
-	 * method will have that method called.
+	 * Provides a means for an NGSession to register the starting of
+	 * a nail execution with the server.
 	 * 
-	 * @param clazz
+	 * @param nailClass the nail class that was launched
 	 */
 	void nailStarted(Class nailClass) {
 		NailStats stats = getOrCreateStatsFor(nailClass);
 		stats.nailStarted();
 	}
 	
+	/**
+	 * Provides a means for an NGSession to register the completion of
+	 * a nails execution with the server.
+	 * 
+	 * @param nailClass the nail class that finished
+	 */
 	void nailFinished(Class nailClass) {
 		NailStats stats = (NailStats) allNailStats.get(nailClass);
 		stats.nailFinished();
@@ -184,6 +233,7 @@ public class NGServer implements Runnable {
 	/**
 	 * Returns a snapshot of this NGServer's nail statistics.  The result is a <code>java.util.Map</code>,
 	 * keyed by class name, with <a href="NailStats.html">NailStats</a> objects as values.
+	 * 
 	 * @return a snapshot of this NGServer's nail statistics.
 	 */
 	public Map getNailStats() {
@@ -207,7 +257,8 @@ public class NGServer implements Runnable {
 
 	/**
 	 * <p>Shuts down the server.  The server will stop listening
-	 * and its thread will finish.</p>
+	 * and its thread will finish.  Any running nails will be allowed
+	 * to finish.</p>
 	 * 
 	 * <p>Any nails that provide a
 	 * <pre><code>public static void nailShutdown(NGServer)</code></pre>
@@ -226,7 +277,7 @@ public class NGServer implements Runnable {
 			serversocket.close();
 		} catch (Throwable toDiscard) {}
 		
-		sessionRunner.shutdown();
+		sessionPool.shutdown();
 		
 		Class[] argTypes = new Class[1];
 		argTypes[0] = NGServer.class;
@@ -282,6 +333,7 @@ public class NGServer implements Runnable {
 	 */
 	public void run() {
 		running = true;
+		NGSession sessionOnDeck = null;
 		
 		synchronized(System.in) {
 			if (!(System.in instanceof ThreadLocalInputStream)) {
@@ -299,8 +351,9 @@ public class NGServer implements Runnable {
 			}
 			
 			while (!shutdown) {
-				sessionRunner.startSessionFor(serversocket.accept());
-				Thread.yield();
+				sessionOnDeck = sessionPool.take();
+				Socket socket = serversocket.accept();
+				sessionOnDeck.run(socket);
 			}
 
 		} catch (Throwable t) {
@@ -310,6 +363,9 @@ public class NGServer implements Runnable {
 			if (!shutdown) {
 				t.printStackTrace();
 			}
+		}
+		if (sessionOnDeck != null) {
+			sessionOnDeck.shutdown();
 		}
 		running = false;
 	}
@@ -337,7 +393,7 @@ public class NGServer implements Runnable {
 
 		// null server address means bind to everything local
 		InetAddress serverAddress = null;
-		int port = DEFAULT_PORT;
+		int port = NGConstants.DEFAULT_PORT;
 		
 		// parse the sole command line parameter, which
 		// may be an inetaddress to bind to, a port number,
@@ -388,6 +444,12 @@ public class NGServer implements Runnable {
 							+ ".");
 	}
 
+	/**
+	 * A shutdown hook that will cleanly bring down the NGServer if it
+	 * is interrupted.
+	 * 
+	 * @author <a href="http://www.martiansoftware.com/contact.html">Marty Lamb</a>
+	 */
 	private static class NGServerShutdowner extends Thread {
 		private NGServer server = null;
 		
