@@ -102,7 +102,7 @@
 		<javac destdir="${build.prod}" srcdir="${src.java.prod}">
 		</javac>
 		<copy todir="${build.prod}">
-		    <fileset dir="${src.java.prod}" excludes="**/*.class"/>
+		    <fileset dir="${src.java.prod}" excludes="**/*.java"/>
 		</copy>
 
 		<javac destdir="${build.debug}" srcdir="${src.java.prod}" debug="yes">
