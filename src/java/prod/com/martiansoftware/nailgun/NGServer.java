@@ -415,7 +415,6 @@ public class NGServer implements Runnable {
 			return;
 		}
 
-		// null server address means bind to everything local
 		InetAddress serverAddress = null;
 		int port = NGConstants.DEFAULT_PORT;
 		
@@ -443,6 +442,9 @@ public class NGServer implements Runnable {
 			}
 		}
 
+		if (serverAddress == null)
+			serverAddress = InetAddress.getByName("localhost");
+
 		NGServer server = new NGServer(serverAddress, port);
 		Thread t = new Thread(server);
 		t.setName("NGServer(" + serverAddress + ", " + port + ")");
@@ -460,9 +462,7 @@ public class NGServer implements Runnable {
 		}
 		
 		System.out.println("NGServer started on "
-							+ ((serverAddress == null) 
-								? "all interfaces" 
-								: serverAddress.getHostAddress())
+							+ serverAddress
 		                    + ", port " 
 							+ runningPort 
 							+ ".");
