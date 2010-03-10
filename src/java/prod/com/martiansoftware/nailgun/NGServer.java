@@ -429,7 +429,7 @@ public class NGServer implements Runnable {
 			if (argParts.length == 2) {
 				addrPart = argParts[0];
 				portPart = argParts[1];
-			} else if (argParts[0].indexOf('.') >= 0) {
+			} else if (!argParts[0].matches("^\\d+$")) {
 				addrPart = argParts[0];
 			} else {
 				portPart = argParts[0];
