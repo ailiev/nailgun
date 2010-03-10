@@ -1,0 +1,7 @@
+build
+dist
+docs
+nailgun-*.jar
+nailgun-*.zip
+*.bak
+*.exe
