@@ -30,8 +30,10 @@
 	#include <netinet/in.h>
 	#include <sys/socket.h>
 	#include <sys/types.h>
+	#include <sys/un.h>
 #endif
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -471,12 +473,11 @@ void usage(int exitcode) {
 
 int main(int argc, char *argv[], char *env[]) {
   int i;
-  struct sockaddr_in server_addr;
   char *nailgun_server;        /* server as specified by user */
   char *nailgun_port;          /* port as specified by user */
+  char *nailgun_unix_socket;
   char *cwd;
   u_short port;                /* port */
-  struct hostent *hostinfo;
   char *cmd;
   int firstArgIndex;           /* the first argument _to pass to the server_ */
 
@@ -500,7 +501,10 @@ int main(int argc, char *argv[], char *env[]) {
   if (nailgun_port == NULL) {
     nailgun_port = NAILGUN_PORT_DEFAULT;
   }
-  
+
+  /* start with environment variable.  use AF_INET if undefined */
+  nailgun_unix_socket = getenv("NAILGUN_UNIX_SOCKET");
+
   /* look at the command used to launch this program.  if it was "ng", then the actual
      command to issue to the server must be specified as another argument.  if it
      wasn't ng, assume that the desired command name was symlinked to ng in the user's
@@ -529,6 +533,11 @@ int main(int argc, char *argv[], char *env[]) {
       nailgun_port = argv[i + 1];
       argv[i] = argv[i + 1]= NULL;
       ++i;
+    } else if (!strcmp("--nailgun-unix-socket", argv[i])) {
+      if (i == argc - 1) usage(NAILGUN_BAD_ARGUMENTS);
+      nailgun_unix_socket = argv[i + 1];
+      argv[i] = argv[i + 1] = NULL;
+      ++i;
     } else if (!strcmp("--nailgun-version", argv[i])) {
       printf("NailGun client version %s\n", NAILGUN_VERSION);
       cleanUpAndExit(0);
@@ -549,33 +558,59 @@ int main(int argc, char *argv[], char *env[]) {
     usage(NAILGUN_BAD_ARGUMENTS);
   }
   
-  /* jump through a series of connection hoops */  
-  hostinfo = gethostbyname(nailgun_server);
+  if (!nailgun_unix_socket) {
+    /* jump through a series of connection hoops */  
+    struct hostent *hostinfo;
+    struct sockaddr_in server_addr;
 
-  if (hostinfo == NULL) {
-    fprintf(stderr, "Unknown host: %s\n", nailgun_server);
-    cleanUpAndExit(NAILGUN_CONNECT_FAILED);
-  }
+    hostinfo = gethostbyname(nailgun_server);
+
+    if (hostinfo == NULL) {
+      fprintf(stderr, "Unknown host: %s\n", nailgun_server);
+      cleanUpAndExit(NAILGUN_CONNECT_FAILED);
+    }
  
-  port = atoi(nailgun_port);
+    port = atoi(nailgun_port);
 
-  if ((nailgunsocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-    perror("socket");
-    cleanUpAndExit(NAILGUN_SOCKET_FAILED);
+    if ((nailgunsocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+      perror("socket");
+      cleanUpAndExit(NAILGUN_SOCKET_FAILED);
+    }
+
+    server_addr.sin_family = AF_INET;    
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr = *(struct in_addr *) hostinfo->h_addr;
+  
+    memset(&(server_addr.sin_zero), '\0', 8);
+
+    if (connect(nailgunsocket, (struct sockaddr *)&server_addr,
+      sizeof(struct sockaddr)) == -1) {
+      perror("connect");
+      cleanUpAndExit(NAILGUN_CONNECT_FAILED);
+    } 
+  } else {
+    struct sockaddr_un *server_addr;
+    int address_length;
+
+    if ((nailgunsocket = socket(PF_UNIX, SOCK_STREAM, 0)) == -1) {
+      perror("socket");
+      cleanUpAndExit(NAILGUN_SOCKET_FAILED);
+    }
+
+    address_length = offsetof (struct sockaddr_un, sun_path) +
+      strlen(nailgun_unix_socket) + 1;
+
+    server_addr = (struct sockaddr_un*) malloc(address_length);
+    server_addr->sun_family = AF_UNIX;
+    strcpy((char *) &(server_addr->sun_path), nailgun_unix_socket);
+    
+    if (connect(nailgunsocket,
+      (struct sockaddr *)server_addr, address_length) == -1) {
+      perror("connect");
+      cleanUpAndExit(NAILGUN_CONNECT_FAILED);
+    }
   }
 
-  server_addr.sin_family = AF_INET;    
-  server_addr.sin_port = htons(port);
-  server_addr.sin_addr = *(struct in_addr *) hostinfo->h_addr;
-  
-  memset(&(server_addr.sin_zero), '\0', 8);
-
-  if (connect(nailgunsocket, (struct sockaddr *)&server_addr,
-    sizeof(struct sockaddr)) == -1) {
-    perror("connect");
-    cleanUpAndExit(NAILGUN_CONNECT_FAILED);
-  } 
-    
   /* ok, now we're connected.  first send all of the command line
      arguments for the server, if any.  remember that we may have
      marked some arguments NULL if we read them to specify the
