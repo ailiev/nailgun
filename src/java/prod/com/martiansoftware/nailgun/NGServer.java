@@ -17,6 +17,7 @@
 */
 
 package com.martiansoftware.nailgun;
+import java.io.File;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
@@ -26,6 +27,9 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Map;
+
+import org.newsclub.net.unix.AFUNIXServerSocket;
+import org.newsclub.net.unix.AFUNIXSocketAddress;
 
 import com.martiansoftware.nailgun.builtins.DefaultNail;
 
@@ -45,7 +49,7 @@ public class NGServer implements Runnable {
 	 * The address on which to listen, or null to listen on all
 	 * local addresses
 	 */
-	private InetAddress addr = null;
+	private String addr = null;
 	
 	/**
 	 * The port on which to listen, or zero to select a port automatically
@@ -123,7 +127,7 @@ public class NGServer implements Runnable {
 	 * to all local addresses
 	 * @param port the port on which to listen.
 	 */
-	public NGServer(InetAddress addr, int port) {
+	public NGServer(String addr, int port) {
 		init(addr, port);
 	}
 	
@@ -143,7 +147,7 @@ public class NGServer implements Runnable {
 	 * @param addr the InetAddress to bind to
 	 * @param port the port on which to listen
 	 */
-	private void init(InetAddress addr, int port) {
+	private void init(String addr, int port) {
 		this.addr = addr;
 		this.port = port;
 		
@@ -368,10 +372,12 @@ public class NGServer implements Runnable {
 		}
 		
 		try {
-			if (addr == null) {
-				serversocket = new ServerSocket(port);
+			if (addr.indexOf('/') == -1) {
+				serversocket = new ServerSocket(
+						port, 0, InetAddress.getByName(addr));
 			} else {
-				serversocket = new ServerSocket(port, 0, addr);
+				serversocket = AFUNIXServerSocket.bindOn(
+						new AFUNIXSocketAddress(new File(addr)));
 			}
 			
 			while (!shutdown) {
@@ -415,7 +421,7 @@ public class NGServer implements Runnable {
 			return;
 		}
 
-		InetAddress serverAddress = null;
+		String serverAddress = null;
 		int port = NGConstants.DEFAULT_PORT;
 		
 		// parse the sole command line parameter, which
@@ -435,7 +441,7 @@ public class NGServer implements Runnable {
 				portPart = argParts[0];
 			}
 			if (addrPart != null) {
-				serverAddress = InetAddress.getByName(addrPart);
+				serverAddress = addrPart;
 			}
 			if (portPart != null) {
 				port = Integer.parseInt(portPart);
@@ -443,7 +449,7 @@ public class NGServer implements Runnable {
 		}
 
 		if (serverAddress == null)
-			serverAddress = InetAddress.getByName("localhost");
+			serverAddress = "localhost";
 
 		NGServer server = new NGServer(serverAddress, port);
 		Thread t = new Thread(server);
