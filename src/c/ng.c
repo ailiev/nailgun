@@ -93,8 +93,13 @@
 #define CHUNKTYPE_ENV 'E'
 #define CHUNKTYPE_DIR 'D'
 #define CHUNKTYPE_CMD 'C'
+#define CHUNKTYPE_CP 'P'
 #define CHUNKTYPE_EXIT 'X'
 
+struct classpath {
+  char *classpath_entry;
+  struct classpath *next; 
+};
 
 /* the socket connected to the nailgun server */
 int nailgunsocket = 0;
@@ -476,6 +481,8 @@ int main(int argc, char *argv[], char *env[]) {
   char *nailgun_server;        /* server as specified by user */
   char *nailgun_port;          /* port as specified by user */
   char *nailgun_unix_socket;
+  struct classpath *nailgun_classpath;
+
   char *cwd;
   u_short port;                /* port */
   char *cmd;
@@ -504,6 +511,8 @@ int main(int argc, char *argv[], char *env[]) {
 
   /* start with environment variable.  use AF_INET if undefined */
   nailgun_unix_socket = getenv("NAILGUN_UNIX_SOCKET");
+
+  nailgun_classpath = NULL;
 
   /* look at the command used to launch this program.  if it was "ng", then the actual
      command to issue to the server must be specified as another argument.  if it
@@ -537,6 +546,15 @@ int main(int argc, char *argv[], char *env[]) {
       if (i == argc - 1) usage(NAILGUN_BAD_ARGUMENTS);
       nailgun_unix_socket = argv[i + 1];
       argv[i] = argv[i + 1] = NULL;
+      ++i;
+    } else if (!strcmp("--nailgun-classpath", argv[i])) {
+      struct classpath *n;
+      if (i == argc - 1) usage(NAILGUN_BAD_ARGUMENTS);
+      n = (struct classpath*) malloc(sizeof(struct classpath));
+      n->classpath_entry = argv[i + 1];
+      n->next = nailgun_classpath;
+      nailgun_classpath = n;
+      argv[i + 1] = NULL;
       ++i;
     } else if (!strcmp("--nailgun-version", argv[i])) {
       printf("NailGun client version %s\n", NAILGUN_VERSION);
@@ -617,6 +635,12 @@ int main(int argc, char *argv[], char *env[]) {
      nailgun server and/or port */
   for(i = firstArgIndex; i < argc; ++i) {
     if (argv[i] != NULL) sendText(CHUNKTYPE_ARG, argv[i]);
+  }
+
+  /* send classpath */
+  while (nailgun_classpath != NULL) {
+    sendText(CHUNKTYPE_CP, nailgun_classpath->classpath_entry);
+    nailgun_classpath = nailgun_classpath->next;
   }
 
   /* now send environment */  
