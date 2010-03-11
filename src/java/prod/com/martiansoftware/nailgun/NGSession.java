@@ -23,6 +23,8 @@ import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.Socket;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.List;
 import java.util.Properties;
 
@@ -186,6 +188,7 @@ class NGSession extends Thread {
 				// client info - command line arguments and environment
 				List remoteArgs = new java.util.ArrayList();
 				Properties remoteEnv = new Properties();
+				List classpath = new java.util.ArrayList();
 				
 				String cwd = null;			// working directory
 				String command = null;		// alias or class name
@@ -224,10 +227,15 @@ class NGSession extends Thread {
 									break;
 									
 						case NGConstants.CHUNKTYPE_WORKINGDIRECTORY:
-									//	client working directory
-									cwd = line;
-									break;
-									
+							//	client working directory
+							cwd = line;
+							break;
+							
+						case NGConstants.CHUNKTYPE_CLASSPATH:
+							//	client classpath
+							classpath.add(new URL(line));
+							break;
+							
 						default:	// freakout?
 					}
 				}
@@ -253,7 +261,13 @@ class NGSession extends Thread {
 					if (alias != null) {
 						cmdclass = alias.getAliasedClass();
 					} else if (server.allowsNailsByClassName()) {
-						cmdclass = Class.forName(command);
+						if (classpath.isEmpty()) {
+							cmdclass = Class.forName(command);
+						} else {
+							URL[] urls = (URL[]) classpath.toArray(new URL[classpath.size()]);
+							URLClassLoader loader = new URLClassLoader(urls);
+							cmdclass = Class.forName(command, true, loader);
+						}
 					} else {
 						cmdclass = server.getDefaultNailClass();
 					}

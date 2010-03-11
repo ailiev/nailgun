@@ -63,6 +63,11 @@ public class NGConstants {
 	public static final char CHUNKTYPE_WORKINGDIRECTORY = 'D';
 	
 	/**
+	 * Chunk type marker for client class paths
+	 */
+	public static final char CHUNKTYPE_CLASSPATH = 'P';
+	
+	/**
 	 * Chunk type marker for stdin
 	 */
 	public static final char CHUNKTYPE_STDIN = '0';
